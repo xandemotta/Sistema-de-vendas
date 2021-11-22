@@ -1,0 +1,213 @@
+import pandas as pd
+from PyQt5.QtWidgets import QMainWindow,QApplication, QLabel,QPushButton,QMessageBox
+import sys
+from janela2 import *
+from janela1 import *
+from cadastro import *
+from comprar import *
+import pyodbc
+from datetime import date
+data_atual= date.today()
+dados_conexao = (
+    'Driver={SQL Server};'
+    'Server=MOTA\SQLEXPRESS;'
+    'Database=burguer;'
+)
+
+conexao = pyodbc.connect(dados_conexao)
+print('Sistema conectado!')
+cursor = conexao.cursor()
+query = "SELECT * FROM Vendas"
+queryqtd = "SELECT qtd FROM Vendas"
+cursor.execute(query)
+df = cursor.fetchall()
+
+class comprar(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.ui = Ui_Comprar()
+        self.jan1=Ui_MainWindow()
+        self.ui.setupUi(self)
+        self.loaddata()
+        cursor.execute(query)
+        df = cursor.fetchall()
+        self.ui.pushButton_comprar.clicked.connect(self.compra)
+        self.ui.tabela_vendas.setRowCount(len(df))
+        self.ui.tabela_vendas.setColumnCount(5)
+        for i in range(0,len(df)):
+            for j in range (0,5):
+                self.ui.tabela_vendas.setItem(i,j,QtWidgets.QTableWidgetItem(str(df[i][j])))
+    def loaddata(self):
+        self.dfff = pd.read_sql(query, conexao)
+        self.df_vendas = pd.DataFrame(self.dfff)
+
+
+    def compra(self):
+        id_product = self.ui.id.text()
+        quantidade = self.ui.qtd.text()
+        self.id= int(id_product)
+        self.quantidade = int(quantidade)
+        self.df_sql = pd.read_sql(query, conexao)
+        df_vendas = pd.DataFrame(self.df_sql)
+        self.estoque = df_vendas.loc[self.id, 'qtd']
+        listt= df_vendas.loc['qtd']
+        listtt=listt.list()
+        for i, d in enumerate(listtt):
+            print(i, d)
+        self.novo_estoque= self.estoque - self.quantidade
+
+        comando = f"""USE burguer
+         SELECT * FROM Vendas
+         UPDATE Vendas set qtd = {self.novo_estoque} where id_venda={self.id};"""
+        if self.quantidade > self.estoque:
+            reply = QMessageBox.question(self, 'Estoque inferior','Estoque insuficiente',
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                self.show()
+            else:
+                self.on_pushButton_clicked()
+        else:
+            cursor.execute(comando)
+            cursor.commit()
+            reply = QMessageBox.question(self, 'Compra efetuada!', 'Parabéns, você deseja comprar mais?',
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                self.show()
+            else:
+                self.on_pushButton_clicked()
+
+
+    def closeEvent(self, event):
+        self.origem=Tela()
+        self.origem.show()
+        event.accept()
+    def on_pushButton_clicked(self):
+        self.origem = Tela()
+        self.origem.show()
+        self.hide()
+class cadastrar_produto(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.ui = Ui_cadastro()
+        self.jan1=Ui_MainWindow()
+        self.ui.setupUi(self)
+        self.ui.label=QLabel(self)
+        self.ui.pushButton.clicked.connect(self.tratador)
+    def clickCallback(self):
+        self.ui.label.setText("Button is clicked")
+
+    def tratador(self, event):
+        nome=self.ui.nome_produto.text()
+        preco=self.ui.preco.text()
+        qtd=self.ui.quantidade.text()
+        comando = f"""INSERT INTO Vendas(nome,data_venda, preco, qtd)
+                     VALUES
+                             ( '{nome}','{data_atual}', {preco}, {qtd})"""
+
+        if nome == "":
+            if preco == "":
+                if qtd == "":
+                    reply = QMessageBox.question(self, 'CAMPO VAZIO', 'Você precisa digitar em todos os campos',
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                    if reply == QMessageBox.Yes:
+                        self.show()
+                    else:
+                       self.on_pushButton_clicked()
+        else:
+            reply = QMessageBox.question(self, 'Cadastrado com sucesso!', 'Deseja realizar mais cadastros?',
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                self.show()
+            else:
+                self.on_pushButton_clicked()
+            cursor.execute(comando)
+            cursor.commit()
+    def novo_produto(self):
+        nome=self.ui.nome_produto.text()
+
+
+    def closeEvent(self, event):
+        self.origem=Tela()
+        self.origem.show()
+        event.accept()
+    def on_pushButton_clicked(self):
+        self.origem = Tela()
+        self.origem.show()
+        self.hide()
+
+
+class listar_produtos(QMainWindow):
+
+    def __init__(self):
+        super().__init__()
+        self.ui = Ui_janela2()
+        self.jan1=Ui_MainWindow()
+        self.ui.setupUi(self)
+        cursor.execute(query)
+        df = cursor.fetchall()
+        self.voltar = QPushButton("voltar")
+        self.ui.voltar.clicked.connect(self.on_pushButton_clicked)
+        self.ui.delete_2.clicked.connect(self.delete)
+        self.ui.tabela_vendas.setRowCount(len(df))
+        self.ui.tabela_vendas.setColumnCount(5)
+        for i in range(0,len(df)):
+            for j in range (0,5):
+                self.ui.tabela_vendas.setItem(i,j,QtWidgets.QTableWidgetItem(str(df[i][j])))
+
+    def delete(self):
+        id_venda = self.ui.id_produto.text()
+        query=f'DELETE FROM Vendas WHERE id_venda = {id_venda}'
+        cursor.execute(query)
+        cursor.commit()
+        query2=f"""USE burguer
+SELECT * FROM excluido_table
+INSERT INTO excluido_table(excluido)
+VALUES (1)"""
+        cursor.execute(query2)
+        self.on_pushButton_clicked()
+    def pegar_dados (self):
+        query = "SELECT * FROM excluido_table"
+        cursor.execute(query)
+        self.dff = cursor.fetchall()
+        count = len(self.dff)
+        print(count)
+
+
+    def on_pushButton_clicked(self):
+        self.origem = Tela()
+        self.origem.show()
+        self.hide()
+    def closeEvent(self, event):
+        self.origem = Tela()
+        self.origem.show()
+        event.accept()
+
+class Tela(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.ui = Ui_MainWindow()
+        self.ui.setupUi(self)
+        self.listar2=listar_produtos()
+        self.cadastro=cadastrar_produto()
+        self.comprar=comprar()
+        self.ui.listar_produtos.clicked.connect(self.tela_listar_produtos)
+        self.ui.cadastrar_produto.clicked.connect(self.tela_cadastrar)
+        self.ui.fazer_uma_venda.clicked.connect(self.tela_comprar)
+        self.ui.sair.clicked.connect(self.sair)
+    def tela_comprar(self):
+        self.comprar.show()
+        self.hide()
+    def tela_listar_produtos(self):
+        self.listar2.show()
+        self.hide()
+    def tela_cadastrar(self):
+        self.cadastro.show()
+        self.hide()
+    def sair(self):
+        sys.exit()
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    w= Tela()
+    w.show()
+    sys.exit(app.exec_())
